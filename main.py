@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 import httpx
-import json
 from pydantic import BaseModel
 from typing import Any, Dict
 
@@ -8,21 +7,32 @@ from typing import Any, Dict
 class ChatMessage(BaseModel):
     message: str
 
-# Define response model
-class ChatResponse(BaseModel):
-    response: Dict[str, Any]  # Changed to accept dictionary response
-
-# Initialize FastAPI app
+# Initialize FastAPI app with metadata
 app = FastAPI(
     title="Langflow API Wrapper",
-    description="A FastAPI wrapper for Langflow chat API"
+    description="A FastAPI wrapper for Langflow chat API",
+    version="1.0.0"
 )
 
 # Langflow API configuration
 LANGFLOW_URL = "https://langflow-c.u22.ypcloud.com/api/v1/run/4653f2ce-2583-486a-8f0b-38268596a24a"
 HEADERS = {'Content-Type': 'application/json'}
 
-@app.post("/chat", response_model=None)  # Removed response_model to return raw response
+@app.get("/")
+async def root():
+    """
+    Root endpoint that provides basic API information
+    """
+    return {
+        "message": "Welcome to Langflow API Wrapper",
+        "docs_url": "/docs",
+        "endpoints": {
+            "chat": "/chat",
+            "health": "/health"
+        }
+    }
+
+@app.post("/chat")
 async def chat(message: ChatMessage):
     """
     Send a chat message to Langflow API and return the response
@@ -45,7 +55,8 @@ async def chat(message: ChatMessage):
             response = await client.post(
                 LANGFLOW_URL,
                 headers=HEADERS,
-                json=payload
+                json=payload,
+                timeout=30.0  # Add timeout
             )
 
             # Check if request was successful
@@ -54,6 +65,11 @@ async def chat(message: ChatMessage):
             # Return the raw response
             return response.json()
 
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Request to Langflow API timed out"
+        )
     except httpx.HTTPError as e:
         raise HTTPException(
             status_code=500,
@@ -65,7 +81,6 @@ async def chat(message: ChatMessage):
             detail=f"Internal server error: {str(e)}"
         )
 
-# Add health check endpoint
 @app.get("/health")
 async def health_check():
     """
@@ -75,4 +90,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=10000)  # Updated port to match Render

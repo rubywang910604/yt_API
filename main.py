@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
 from pydantic import BaseModel
-from typing import Any, Dict
 
 # Define request model
 class ChatMessage(BaseModel):
@@ -18,6 +18,21 @@ app = FastAPI(
 LANGFLOW_URL = "https://langflow-c.u22.ypcloud.com/api/v1/run/4653f2ce-2583-486a-8f0b-38268596a24a"
 HEADERS = {'Content-Type': 'application/json'}
 
+# Security: HTTP Bearer token authentication
+security = HTTPBearer()
+API_KEY = "yt355a7fecb0"  # Custom API key set by the user
+
+def verify_bearer_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Verify the Bearer token in the Authorization header
+    """
+    if credentials.credentials != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized: Invalid Bearer Token"
+        )
+    return credentials.credentials
+
 @app.get("/")
 async def root():
     """
@@ -26,6 +41,7 @@ async def root():
     return {
         "message": "Welcome to Langflow API Wrapper",
         "docs_url": "/docs",
+        "api_key": API_KEY,  # Display the API Key for reference
         "endpoints": {
             "chat": "/chat",
             "health": "/health"
@@ -33,7 +49,10 @@ async def root():
     }
 
 @app.post("/chat")
-async def chat(message: ChatMessage):
+async def chat(
+    message: ChatMessage,
+    token: str = Depends(verify_bearer_token)  # Add token verification
+):
     """
     Send a chat message to Langflow API and return the response
     """
@@ -82,7 +101,9 @@ async def chat(message: ChatMessage):
         )
 
 @app.get("/health")
-async def health_check():
+async def health_check(
+    token: str = Depends(verify_bearer_token)  # Add token verification
+):
     """
     Health check endpoint
     """
@@ -90,4 +111,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=10000)  # Updated port to match Render
+    uvicorn.run(app, host="0.0.0.0", port=10000)
